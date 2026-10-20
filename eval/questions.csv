@@ -1,0 +1,11 @@
+id,question,type,tag,doc_id,expected_pages,answer_phrases,match,notes
+q1,What is the economic threshold level (ETL) for aphids and whiteflies when monitoring potato pests?,in_scope,table,potato_disease-pest-management_cpri_2016_manual,20,2/100 leaves,any,Printed page 14 Table 1 is PDF page 20
+q2,What temperature range and relative humidity are required for sporangia formation and indirect germination in potato late blight?,in_scope,multi,potato_disease-pest-management_cpri_2016_manual,29,3 to 26; 6 to 15,all,Printed page 23 is PDF page 29
+q3,How can bacterial wilt in potato be distinguished from fungal wilts in the field using a stem cut section?,in_scope,plain,potato_disease-pest-management_cpri_2016_manual,34,clear water,any,Printed page 28 is PDF page 34
+q4,When should fenoxaprop-p-ethyl be sprayed in dry direct-sown rice and at what dose?,in_scope,conflict,rice_weed-mgmt-dry-direct-seeded_nrri_2019_brief,4;7,25-28 DAE; 18-20 DAS,all,PDF page 4 text says 25-28 DAE and PDF page 7 table says 18-20 DAS
+q5,How is a 2% brine solution used as a preventive measure for weed management in dry direct-sown rice?,in_scope,plain,rice_weed-mgmt-dry-direct-seeded_nrri_2019_brief,3,2% brine,any,PDF page 3 under Preventive measures
+q6,Why can post-emergence selective herbicides not be used to control weedy rice in a normal paddy field and how does Clearfield rice solve this?,in_scope,plain,rice_weedy-rice-options_dwsr_2013_article,5,Clearfield,any,Printed page 1071 is PDF page 5
+q7,"What are the recommended seed rate and fertilizer dose (N:P2O5:K2O) for improved wheat varieties VL Gehun 907 and VL Gehun 953 compared to existing farmer practices?",in_scope,table,wheat_rust-resistant-varieties-economics_vpkas_2020_article,5,120:60:40,any,Printed page 146 Table 1 is PDF page 5
+q8,Without using chemicals how can a farmer use summer heat and plastic sheets to kill soil-borne black scurf fungus in potato fields?,in_scope,paraphrase,potato_disease-pest-management_cpri_2016_manual,56,solarization,any,Keyword-free paraphrase on printed page 50 (PDF page 56)
+q9,Which herbicide is recommended to control weeds in a sesame (til) crop?,out_of_scope,out_of_scope,,,,,Out of scope crop
+q10,What is the latest installment amount and eligibility criteria under the PM-KISAN government scheme for farmers?,out_of_scope,out_of_scope,,,,,Out of scope scheme
