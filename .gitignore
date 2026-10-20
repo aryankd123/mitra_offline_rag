@@ -2,3 +2,5 @@
 data/chroma/
 __pycache__/
 data/raw/
+data/excluded/
+data/pending_ocr/
