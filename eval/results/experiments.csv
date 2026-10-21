@@ -1,0 +1,19 @@
+run_id,date,config,split,n,recall@1,recall@3,recall@5,mrr@10,median_gold_rank,oos_false_accept_rate,is_false_reject_rate,notes
+5A3_baseline_1000_100_k5,2026-10-21 16:53,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5}",dev,26,0.4,0.7,0.75,0.5647,2.0,0.0,0.25,chunks=615; table_R@5=0.667; Stage 5A-3 baseline
+5A4_grid_500_0_k5,2026-10-21 17:00,"{""chunk_size"": 500, ""chunk_overlap"": 0, ""k"": 5}",dev,26,0.55,0.8,0.9,0.6783,1.0,0.0,0.1,chunks=1170; table_R@5=1.000; grid 500/0
+5A4_grid_500_100_k5,2026-10-21 17:05,"{""chunk_size"": 500, ""chunk_overlap"": 100, ""k"": 5}",dev,26,0.4,0.7,0.85,0.5829,2.0,0.0,0.1,chunks=1252; table_R@5=1.000; grid 500/100
+5A4_grid_500_200_k5,2026-10-21 17:11,"{""chunk_size"": 500, ""chunk_overlap"": 200, ""k"": 5}",dev,26,0.5,0.7,0.8,0.6439,1.5,0.0,0.05,chunks=1577; table_R@5=1.000; grid 500/200
+5A4_grid_1000_0_k5,2026-10-21 17:14,"{""chunk_size"": 1000, ""chunk_overlap"": 0, ""k"": 5}",dev,26,0.5,0.75,0.8,0.61,1.5,0.0,0.2,chunks=600; table_R@5=0.667; grid 1000/0
+5A4_grid_1000_100_k5,2026-10-21 17:14,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5}",dev,26,0.4,0.7,0.75,0.5647,2.0,0.0,0.25,chunks=615; table_R@5=0.667; grid 1000/100
+5A4_grid_1000_200_k5,2026-10-21 17:20,"{""chunk_size"": 1000, ""chunk_overlap"": 200, ""k"": 5}",dev,26,0.4,0.75,0.85,0.5808,2.0,0.0,0.25,chunks=654; table_R@5=0.667; grid 1000/200
+5A4_grid_1500_0_k5,2026-10-21 17:27,"{""chunk_size"": 1500, ""chunk_overlap"": 0, ""k"": 5}",dev,26,0.35,0.45,0.6,0.4684,5.0,0.1667,0.25,chunks=420; table_R@5=0.667; grid 1500/0
+5A4_grid_1500_100_k5,2026-10-21 17:29,"{""chunk_size"": 1500, ""chunk_overlap"": 100, ""k"": 5}",dev,26,0.3,0.5,0.65,0.4582,3.5,0.1667,0.25,chunks=423; table_R@5=0.667; grid 1500/100
+5A4_grid_1500_200_k5,2026-10-21 17:33,"{""chunk_size"": 1500, ""chunk_overlap"": 200, ""k"": 5}",dev,26,0.35,0.45,0.75,0.4821,4.0,0.1667,0.2,chunks=438; table_R@5=1.000; grid 1500/200
+5A4_k_3_1000_100,2026-10-21 17:33,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 3}",dev,26,0.4,0.7,0.7,0.5647,2.0,0.0,0.25,chunks=615; table_R@3=0.667; k=3 check
+5A4_k_4_1000_100,2026-10-21 17:33,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 4}",dev,26,0.4,0.7,0.75,0.5647,2.0,0.0,0.25,chunks=615; table_R@4=0.667; k=4 check
+5A4_k_6_1000_100,2026-10-21 17:33,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 6}",dev,26,0.4,0.7,0.8,0.5647,2.0,0.0,0.25,chunks=615; table_R@6=0.667; k=6 check
+5B1_nomic_prefixes,2026-10-21 17:41,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5, ""embed_model"": ""nomic-embed-text"", ""doc_prefix"": ""search_document: "", ""query_prefix"": ""search_query: ""}",dev,26,0.45,0.6,0.8,0.5808,2.0,0.0,0.2,chunks=615; table_R@5=0.667; nomic with search_document/search_query prefixes
+5B1_bge_m3,2026-10-21 18:04,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5, ""embed_model"": ""bge-m3"", ""doc_prefix"": """", ""query_prefix"": """"}",dev,26,0.45,0.75,0.9,0.6375,2.0,0.0,0.95,chunks=615; table_R@5=1.000; bge-m3 1024-dim
+5B2_table_aware_dedup,2026-10-21 18:07,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5}",dev,26,0.35,0.7,0.75,0.5222,2.5,0.0,0.2,chunks=653; table_R@5=0.667; find_tables().to_markdown() + bbox redacted
+5B3a_reflow_sentences,2026-10-21 18:14,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5, ""separators"": [""\n\n"", ""\n"", "". "", "" "", """"], ""join_hyphens"": true}",dev,26,0.4,0.7,0.75,0.5576,2.0,0.0,0.25,chunks=725; table_R@5=1.000; reflow wrapped lines + '. ' separator
+5B3b_drop_refs_min50,2026-10-21 18:14,"{""chunk_size"": 1000, ""chunk_overlap"": 100, ""k"": 5, ""min_chunk_len"": 50}",dev,26,0.45,0.65,0.7,0.5681,2.0,0.0,0.3,chunks=521; table_R@5=0.667; drop reference pages + min_chunk_len=50
