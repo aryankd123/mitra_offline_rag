@@ -4,3 +4,4 @@ __pycache__/
 data/raw/
 data/excluded/
 data/pending_ocr/
+data/embed_cache.sqlite
