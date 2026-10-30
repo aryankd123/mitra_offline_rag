@@ -21,6 +21,7 @@ from src.corpus import norm_text
 from src.retrieve import retrieve
 
 RANK_DEPTH = 50  # how deep we look for the gold rank; MRR is cut at 10
+QUESTIONS_VERSION = "v3"  # v3 = v2 + q69-q94 for the Iteration 3 documents, q44 relabelled in scope
 
 
 def load_questions(split):
@@ -175,7 +176,7 @@ def main():
                "min_chunk_len": config.MIN_CHUNK_LEN, "embed_model": config.EMBED_MODEL,
                "threshold": config.SIMILARITY_THRESHOLD, "crop_guard": True, "search": "exact (numpy)",
                "crop_routing": config.CROP_ROUTING, "topic_gap_alpha": config.TOPIC_GAP_ALPHA,
-               "generator": config.GENERATOR_MODEL, "questions": "v2"}
+               "generator": config.GENERATOR_MODEL, "questions": QUESTIONS_VERSION}
         with open(config.EXPERIMENTS_CSV, "a", encoding="utf-8", newline="") as f:
             csv.writer(f).writerow([
                 args.run_id or f"6_modules_chroma_{args.split}", datetime.now().strftime("%Y-%m-%d %H:%M"), json.dumps(cfg),

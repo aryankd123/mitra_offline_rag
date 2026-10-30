@@ -3,7 +3,8 @@
     python -m eval.lint_questions
 
 in_scope rows: every answer phrase must be on an expected page AND inside one indexed chunk of that page.
-out_of_scope rows: every term after "absent:" in notes must appear on no page (word boundary).
+out_of_scope rows: every term after "absent:" in notes must appear on no page (word boundary), except pages
+listed after "@" (joined by "+"): mentions checked by hand that don't answer the question (Iteration 3).
 Exit code 1 on any error.
 """
 import csv
@@ -56,9 +57,12 @@ def lint(csv_path=config.QUESTIONS_CSV):
             if "absent:" not in notes:
                 errors.append(f"{where}: notes need 'absent: term; term'")
                 continue
-            for term in [norm_text(t) for t in notes.split("absent:", 1)[1].split(";") if t.strip()]:
-                pat = re.compile(r"\b" + re.escape(term) + r"\b")
-                hits = [f"{d}:p{p}" for (d, p), t in page_text.items() if pat.search(t)]
+            for entry in [t for t in notes.split("absent:", 1)[1].split(";") if t.strip()]:
+                # "term@doc:pN+doc:pM" allows pages checked by hand to only mention the term, not answer it
+                term, _, allowed = entry.partition("@")
+                allowed = {a.strip() for a in allowed.split("+") if a.strip()}
+                pat = re.compile(r"\b" + re.escape(norm_text(term)) + r"\b")
+                hits = [f"{d}:p{p}" for (d, p), t in page_text.items() if pat.search(t) and f"{d}:p{p}" not in allowed]
                 if hits:
                     errors.append(f"{where}: absent term {term!r} found on {hits[:3]}")
         else:
