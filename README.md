@@ -7,7 +7,7 @@ It replaces the original Mitra chatbot, which ran a DuckDuckGo search per questi
 ## How it works
 
 ```
-ingest (once):  PDF pages ─ PyMuPDF ─► clean boilerplate ─► 1000-char chunks per page ─► nomic-embed-text ─► Chroma (store)
+ingest (once):  PDF pages ─ PyMuPDF (RapidOCR if a page has no text layer) ─► clean boilerplate ─► 1000-char chunks per page ─► nomic-embed-text ─► Chroma (store)
 query:          question ─► route to the crop it names ─► embed ─► exact top-5 cosine search ─► gate ─► numbered-context prompt ─► gemma3:4b ─► answer + sources
 ```
 
@@ -19,7 +19,7 @@ The **gate** refuses before calling the model when any of three checks fires:
 
 Every answer is followed by the list of passages the model was shown, so citations can be checked. Search is exact NumPy cosine over the vectors stored in Chroma (Chroma's approximate HNSW search was not repeatable here, see `DECISIONS.md` E-17).
 
-All parameters were chosen by measurement on a dev split of 40 hand-written questions; see [Results](#results) and [`DECISIONS.md`](DECISIONS.md).
+All parameters were chosen by measurement on the dev split of the hand-written evaluation questions; see [Results](#results) and [`DECISIONS.md`](DECISIONS.md).
 
 ## Setup
 
@@ -35,11 +35,12 @@ python -m pip install -r requirements.txt
 ollama pull nomic-embed-text
 ollama pull gemma3:4b                 # default generator; gemma3:1b for a fast CPU demo
 
-# 3. Documents: place the PDFs listed in SOURCES.csv (status "raw") in data/raw/.
+# 3. Documents: place the PDFs listed in SOURCES.csv (status "raw" or "raw (OCR)") in data/raw/.
 #    They are not in this repo (licences). Filenames must follow <crop>_<topic>_<org>_<year>_<kind>.pdf
 
 # 4. Build the index
-python -m src.ingest                  # expect: 164 pages -> 595 chunks
+python -m src.ingest                  # expect: 194 pages -> 726 chunks
+#    The first run OCRs 8 leaflet pages (about 25 s each on CPU); the text is cached in data/ocr_cache/.
 ```
 
 Run every command from the repo root.
@@ -66,7 +67,7 @@ python -m eval.answer_check eval/results/answers_<run>.md   # does each answer c
 python -m eval.lint_questions                               # every question checked against the PDFs
 ```
 
-`eval/questions.csv` has 68 questions (dev 44, test 24; 46 in-scope, 22 out-of-scope), each with the expected document, page and an answer phrase. Out-of-scope questions include other crops, schemes, and topics the documents don't cover for a covered crop (e.g. rice diseases). A retrieval hit means a top-k chunk is on the expected page **and** contains the answer phrase. Every experiment, including failed ones, is logged in `DECISIONS.md` and its script kept in `eval/experiments/`.
+`eval/questions.csv` has 94 questions (dev 60, test 34; 73 in-scope, 21 out-of-scope), each with the expected document, page and an answer phrase. Out-of-scope questions include other crops, schemes, and topics the documents don't cover for a covered crop (e.g. rice diseases). A retrieval hit means a top-k chunk is on the expected page **and** contains the answer phrase. Every experiment, including failed ones, is logged in `DECISIONS.md` and its script kept in `eval/experiments/`.
 
 ## Offline proof
 
@@ -94,22 +95,28 @@ End to end (gate, then the model, which can also refuse):
 | Answered questions containing the expected answer phrase | 18 / 25 | 8 / 9 |
 | Generation time, median (95th percentile) | 78 s (102 s) | 94 s (112 s) |
 
-Retrieval itself takes about 5–11 ms per question. Earlier results (Stage 5, 40 questions, `gemma3:1b`): see `DECISIONS.md` and the project book.
+Retrieval itself takes about 5–11 ms per question.
+
+**Iteration 3** (30 Oct: 11 PDFs, 2 read with OCR, 726 chunks, questions v3), dev split only so far: Recall@5 0.750, MRR@10 0.563 on 48 in-scope questions (0.765 on the 17 new ones). The gate wrongly refuses 3 of 48 but wrongly answers **3 of 12** out-of-scope questions, up from 1 of 13: more documents raise the best similarity for any question, and a single passing mention of a word silences the topic-gap check (`DECISIONS.md` E-30). End to end with `gemma3:4b` on the 22 dev questions this iteration touched: the model refused 2 of the 3 leaked out-of-scope questions but answered "diseases in rice" with weedy-rice facts; 6 of 19 in-scope answers were wrong, 5 of them after retrieval missed the right page (the model answered from nearby passages instead of refusing; E-32). The test split v3 has not been run.
+
+Earlier results (Stage 5, 40 questions, `gemma3:1b`): see `DECISIONS.md` and the project book.
 
 ## Known limitations
 
 - **Over-refusal.** 12 of 46 real questions are refused: 9 by the 0.725 similarity threshold (mostly short or paraphrased questions) and 2 by the topic-gap check (v1) on word forms ("planting" vs "transplanted"; "root" for "CRI stage"). Topic-gap v2 fixed "root" and the live false refusal on "type"; "planting" remains. Chatty questions ("Hi could you tell me…") score lower and are refused more often.
-- **Faithfulness.** `gemma3:4b` still occasionally swaps numbers within one passage (q2: germination vs sporangia temperature). Always check the answer against the listed passages.
+- **Faithfulness.** `gemma3:4b` still occasionally swaps numbers within one passage (q2: germination vs sporangia temperature) or takes the wrong table row (q78), and when retrieval misses the right page it tends to answer from nearby passages rather than refuse. Always check the answer against the listed passages.
 - **Speed.** About 1–2 minutes per answer on CPU; a GPU or `MITRA_GENERATOR_MODEL=gemma3:1b` (faster, but it never refuses by itself) for demos.
-- Small corpus: 4 PDFs, ~85% of the text from one potato manual. No rice diseases, fertiliser, wheat diseases or government schemes; these are refused.
-- The eval v2 questions (q41–q68) were added on 29 Oct and are pending a second review.
+- **Gate depends on the corpus.** τ = 0.725 and the topic-gap check were tuned on 595 chunks; with 726 chunks two uncovered rice questions pass the gate (see Results). Re-check the gate after every ingest.
+- **OCR text** (two leaflets) has missing spaces and merged photo captions; overview chunks from these leaflets rank high for many rice questions.
+- Small corpus: 11 PDFs, 71% of chunks from one potato manual. No rice diseases or government schemes.
+- The eval v2 and v3 questions (q41–q94) were added on 29–30 Oct and are pending a second review.
 - English only. Single-turn (no follow-up questions).
 
 ## Repository
 
 ```
 config.py        frozen parameters + env overrides
-src/             corpus, embed (sqlite cache), store, ingest, retrieve (exact search), coverage (topic gap),
+src/             corpus, ocr (RapidOCR + cache), embed (sqlite cache), store, ingest, retrieve (exact search), coverage (topic gap),
                  answer (routing + gate + generation), ask (CLI), api (FastAPI), netguard
 static/          index.html (no external resources)
 eval/            questions.csv, run_eval.py, answer_check.py, lint_questions.py, results/, experiments/ (one script per test)
