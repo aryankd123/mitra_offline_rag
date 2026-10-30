@@ -27,6 +27,13 @@ CHUNK_OVERLAP = 100
 MIN_CHUNK_LEN = 50
 DROP_REFERENCE_CHUNKS = True
 
+# OCR for pages with no text layer (src/ocr.py, Iteration 3)
+OCR_ENABLED = True
+OCR_MIN_CHARS = 20  # a page with fewer extracted characters than this is treated as an image page
+OCR_DPI = 200       # 150 and 300 were tested too (test 45); 200 read all reference sentences
+OCR_USE_CLS = False  # text-angle classifier off: it flipped a line upside down and lost others (test 46)
+OCR_CACHE_DIR = DATA_DIR / "ocr_cache"
+
 TOP_K = 5
 SIMILARITY_THRESHOLD = 0.725
 # Word in the question -> crop in the metadata. Routing searches only that crop's chunks (Iteration 2, D-54).

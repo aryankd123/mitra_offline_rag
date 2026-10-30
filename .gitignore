@@ -5,3 +5,5 @@ data/raw/
 data/excluded/
 data/pending_ocr/
 data/embed_cache.sqlite
+data/ocr_cache/
+data/incoming/

@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import config
+from src.ocr import ocr_page
 
 KINDS = {"brief", "bulletin", "manual", "article", "guideline", "leaflet"}
 
@@ -37,8 +38,13 @@ def load_and_clean_corpus(raw_dir=config.RAW_DIR):
         with pymupdf.open(str(p)) as pdf:
             for i, page in enumerate(pdf):
                 meta = meta_from_name(p)
-                meta.update({"source": p.name, "page": i + 1})
-                pages.append(Document(page_content=page.get_text(), metadata=meta))
+                meta.update({"source": p.name, "page": i + 1, "ocr": False})
+                text = page.get_text()
+                if config.OCR_ENABLED and len(text.strip()) < config.OCR_MIN_CHARS:
+                    key = f"{p.stem}_p{i + 1}_dpi{config.OCR_DPI}_cls{int(config.OCR_USE_CLS)}"
+                    text = ocr_page(page, key)  # no text layer (D-61); key changes with the OCR settings
+                    meta["ocr"] = True
+                pages.append(Document(page_content=text, metadata=meta))
 
     by_doc = defaultdict(list)
     for d in pages:
