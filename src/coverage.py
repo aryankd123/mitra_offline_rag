@@ -5,10 +5,12 @@ p = share of the other crops' chunks that contain the word, n = number of chunks
 If the word were as common here as elsewhere, the chance of seeing it in none of the n chunks is (1 - p) ** n.
 Below TOPIC_GAP_ALPHA the absence is not chance: the documents don't cover that topic for this crop.
 
-Example: "disease" is in 38% of potato/wheat chunks; rice has 46 chunks; (1 - 0.38) ** 46 = 3e-10 -> refuse.
-"type" is in 7% of potato/rice chunks; wheat has 33 chunks; (1 - 0.07) ** 33 = 0.09 -> not evidence, keep going.
+Example (Iteration 2 corpus): "disease" is in 38% of potato/wheat chunks; rice has 46 chunks; (1 - 0.38) ** 46 = 3e-10
+-> refuse. "type" is in 7% of potato/rice chunks; wheat has 33 chunks; (1 - 0.07) ** 33 = 0.09 -> not evidence, keep going.
 v1 used a fixed ">= 20 other-crop chunks" cut-off, which ignored crop size (potato 516 chunks, wheat 33)
 and refused ordinary words like "type" (E-22).
+Known weakness (E-30): one passing mention is enough to silence it. Since Iteration 3, "disease" occurs in 4 of
+120 rice chunks, so "diseases in rice" is no longer flagged although no document covers rice diseases.
 """
 import re
 from collections import Counter, defaultdict
@@ -40,8 +42,10 @@ def _chunk_counts():
         got = get_collection().get(include=["documents", "metadatas"])
         _df, _n_chunks = defaultdict(Counter), Counter()
         for doc, meta in zip(got["documents"], got["metadatas"]):
-            _df[meta["crop"]].update(terms(doc))
-            _n_chunks[meta["crop"]] += 1
+            t = terms(doc)
+            for crop in meta["crop"].split("-"):  # a "rice-wheat" chunk counts for both crops
+                _df[crop].update(t)
+                _n_chunks[crop] += 1
     return _df
 
 

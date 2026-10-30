@@ -1,8 +1,8 @@
 """Top-k retrieval: exact cosine search over the vectors stored in Chroma (design R6, E-17).
 
 Chroma stays the store (persistence, IDs, metadata, upserts). Its HNSW index is approximate and missed the
-true nearest chunk in 2 of 3 runs for one dev question, so search is done exactly in NumPy: at 595 chunks
-that is one 595 x 768 matrix product. Revisit if the corpus grows past ~100k chunks.
+true nearest chunk in 2 of 3 runs for one dev question, so search is done exactly in NumPy: at 726 chunks
+that is one 726 x 768 matrix product. Revisit if the corpus grows past ~100k chunks.
 Restart the process after `python -m src.ingest` so the in-memory copy is reloaded.
 """
 import numpy as np
@@ -22,9 +22,11 @@ def _resources():
         got = get_collection().get(include=["embeddings", "documents", "metadatas"])
         E = np.asarray(got["embeddings"], dtype=np.float64)
         E /= np.clip(np.linalg.norm(E, axis=1, keepdims=True), 1e-12, None)
+        # A document can cover several crops ("rice-wheat"); each crop gets a boolean row mask
+        crop_sets = [set(m["crop"].split("-")) for m in got["metadatas"]]
         _index = {
             "ids": got["ids"], "E": E, "docs": got["documents"], "metas": got["metadatas"],
-            "crops": np.array([m["crop"] for m in got["metadatas"]]),
+            "crop_mask": {c: np.array([c in s for s in crop_sets]) for c in set().union(*crop_sets)},
         }
         _embedder = CachedEmbedder()
     return _embedder, _index
@@ -35,7 +37,7 @@ def retrieve(question, k=config.TOP_K, crop=None):
     embedder, ix = _resources()
     sims = ix["E"] @ embedder.embed_query(question)
     if crop:
-        sims = np.where(ix["crops"] == crop, sims, -np.inf)
+        sims = np.where(ix["crop_mask"].get(crop, np.zeros(len(sims), dtype=bool)), sims, -np.inf)
     order = [i for i in np.argsort(-sims, kind="stable")[:k] if np.isfinite(sims[i])]
     return [
         {
