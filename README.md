@@ -8,14 +8,14 @@ It replaces the original Mitra chatbot, which ran a DuckDuckGo search per questi
 
 ```
 ingest (once):  PDF pages ─ PyMuPDF (RapidOCR if a page has no text layer) ─► clean boilerplate ─► 1000-char chunks per page ─► nomic-embed-text ─► Chroma (store)
-query:          question ─► route to the crop it names ─► embed ─► exact top-5 cosine search ─► gate ─► numbered-context prompt ─► gemma3:4b ─► answer + sources
+query:          question ─► route to the crop it names ─► embed ─► exact top-30 cosine search ─► cross-encoder rerank, keep 5 ─► gate ─► numbered-context prompt ─► gemma3:4b ─► answer + sources
 ```
 
 The **gate** refuses before calling the model when any of three checks fires:
 
 1. the question names a crop with no documents (e.g. sesame, mango);
 2. it uses a word that never appears in the asked crop's documents although its absence would be very unlikely by chance, (1 − p)ⁿ < 0.01 with p its share of other-crop chunks and n the crop's chunk count ("The rice documents never mention: diseases.");
-3. the best chunk's cosine similarity is below 0.725.
+3. no passage really answers it: the best reranker score is below 0.171 (bge-reranker-v2-m3; with reranking off, the best cosine similarity below 0.725).
 
 Every answer is followed by the list of passages the model was shown, so citations can be checked. Search is exact NumPy cosine over the vectors stored in Chroma (Chroma's approximate HNSW search was not repeatable here, see `DECISIONS.md` E-17).
 
@@ -34,6 +34,7 @@ python -m pip install -r requirements.txt
 # 2. Models (needs internet once)
 ollama pull nomic-embed-text
 ollama pull gemma3:4b                 # default generator; gemma3:1b for a fast CPU demo
+python -m src.rerank --download bge-m3-int8 minilm-l6   # reranker ONNX files (~650 MB) into data/models/
 
 # 3. Documents: place the PDFs listed in SOURCES.csv (status "raw" or "raw (OCR)") in data/raw/.
 #    They are not in this repo (licences). Filenames must follow <crop>_<topic>_<org>_<year>_<kind>.pdf
@@ -55,7 +56,7 @@ python -m src.ask                     # interactive
 
 API: `POST /ask` with `{"question": "...", "crop": "potato" | "rice" | "wheat" | null}` returns the answer, gate decision, sources (doc, page, year, similarity) and `timings_ms`. `GET /health` reports Ollama, models, index and the offline guard.
 
-Machine-specific settings (generator model, data folder, host/port) are environment variables — see [`.env.example`](.env.example). Example for a quick CPU demo: `$env:MITRA_GENERATOR_MODEL = "gemma3:1b"`. Restart the server after re-running ingest.
+Machine-specific settings (generator model, reranker, data folder, host/port) are environment variables — see [`.env.example`](.env.example). Example for a quick CPU demo: `$env:MITRA_GENERATOR_MODEL = "gemma3:1b"` and `$env:MITRA_RERANK_MODEL = "minilm-l6"` (4 s instead of 39 s per question, but a weaker gate). Restart the server after re-running ingest.
 
 ## Evaluation
 
@@ -99,13 +100,15 @@ Retrieval itself takes about 5–11 ms per question.
 
 **Iteration 3** (30 Oct: 11 PDFs, 2 read with OCR, 726 chunks, questions v3), dev split only so far: Recall@5 0.750, MRR@10 0.563 on 48 in-scope questions (0.765 on the 17 new ones). The gate wrongly refuses 3 of 48 but wrongly answers **3 of 12** out-of-scope questions, up from 1 of 13: more documents raise the best similarity for any question, and a single passing mention of a word silences the topic-gap check (`DECISIONS.md` E-30). End to end with `gemma3:4b` on the 22 dev questions this iteration touched: the model refused 2 of the 3 leaked out-of-scope questions but answered "diseases in rice" with weedy-rice facts; 6 of 19 in-scope answers were wrong, 5 of them after retrieval missed the right page (the model answered from nearby passages instead of refusing; E-32). The test split v3 has not been run.
 
+**Iteration 4** (1 Nov: cross-encoder reranker, dev split): `bge-reranker-v2-m3` re-ordering the top 30 raises Recall@5 from 0.750 to 0.917 (MRR 0.563 → 0.753), and a threshold on its score refuses every off-topic dev question (0 of 12, from 3 of 12) while wrongly refusing 1 of 48. `ms-marco-MiniLM-L6-v2` is 9× faster but reaches 0.833 and still answers "diseases in rice" (`DECISIONS.md` E-34–E-36).
+
 Earlier results (Stage 5, 40 questions, `gemma3:1b`): see `DECISIONS.md` and the project book.
 
 ## Known limitations
 
 - **Over-refusal.** 12 of 46 real questions are refused: 9 by the 0.725 similarity threshold (mostly short or paraphrased questions) and 2 by the topic-gap check (v1) on word forms ("planting" vs "transplanted"; "root" for "CRI stage"). Topic-gap v2 fixed "root" and the live false refusal on "type"; "planting" remains. Chatty questions ("Hi could you tell me…") score lower and are refused more often.
 - **Faithfulness.** `gemma3:4b` still occasionally swaps numbers within one passage (q2: germination vs sporangia temperature) or takes the wrong table row (q78), and when retrieval misses the right page it tends to answer from nearby passages rather than refuse. Always check the answer against the listed passages.
-- **Speed.** About 1–2 minutes per answer on CPU; a GPU or `MITRA_GENERATOR_MODEL=gemma3:1b` (faster, but it never refuses by itself) for demos.
+- **Speed.** About 1–2 minutes per answer on CPU, plus about 39 s (median) for bge reranking on a 2-core laptop; refusals are no longer instant; a GPU or `MITRA_GENERATOR_MODEL=gemma3:1b` (faster, but it never refuses by itself) for demos.
 - **Gate depends on the corpus.** τ = 0.725 and the topic-gap check were tuned on 595 chunks; with 726 chunks two uncovered rice questions pass the gate (see Results). Re-check the gate after every ingest.
 - **OCR text** (two leaflets) has missing spaces and merged photo captions; overview chunks from these leaflets rank high for many rice questions.
 - Small corpus: 11 PDFs, 71% of chunks from one potato manual. No rice diseases or government schemes.
@@ -116,7 +119,7 @@ Earlier results (Stage 5, 40 questions, `gemma3:1b`): see `DECISIONS.md` and the
 
 ```
 config.py        frozen parameters + env overrides
-src/             corpus, ocr (RapidOCR + cache), embed (sqlite cache), store, ingest, retrieve (exact search), coverage (topic gap),
+src/             corpus, ocr (RapidOCR + cache), embed (sqlite cache), store, ingest, retrieve (exact search), rerank (cross-encoder), coverage (topic gap),
                  answer (routing + gate + generation), ask (CLI), api (FastAPI), netguard
 static/          index.html (no external resources)
 eval/            questions.csv, run_eval.py, answer_check.py, lint_questions.py, results/, experiments/ (one script per test)
