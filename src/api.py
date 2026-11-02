@@ -40,6 +40,7 @@ class Source(BaseModel):
     page: int
     year: int
     similarity: float
+    relevance: float | None = None  # cross-encoder score, when a reranker is configured (D-64)
 
 
 class AskResponse(BaseModel):
@@ -48,6 +49,8 @@ class AskResponse(BaseModel):
     gate_reason: str | None
     gate_detail: str | None
     top_similarity: float
+    top_relevance: float | None = None
+    reranker: str | None = None
     crop_used: str | None
     crop_note: str | None
     sources: list[Source]
@@ -78,6 +81,8 @@ def ask(req: AskRequest):
         gate_reason=res["gate_reason"],
         gate_detail=res["gate_detail"],
         top_similarity=res["top_similarity"],
+        top_relevance=res["top_relevance"],
+        reranker=res["reranker"],
         crop_used=res["crop_used"],
         crop_note=res["crop_note"],
         sources=res["sources"],
@@ -85,6 +90,7 @@ def ask(req: AskRequest):
         prompt_version=res["prompt_version"],
         timings_ms={
             "retrieve": round(t["retrieve_s"] * 1000, 1),
+            "rerank": round(t["rerank_s"] * 1000, 1),
             "generate": round(t["generate_s"] * 1000, 1),
             "total": round((time.perf_counter() - t0) * 1000, 1),
         },
@@ -109,13 +115,22 @@ def health():
     except Exception as e:  # missing collection or config mismatch
         checks["index"] = {"ok": False, "error": str(e)}
 
-    ok = checks["ollama"]["ok"] and checks["index"]["ok"] and not checks["offline_guard"]["blocked"]
+    if config.RERANK_MODEL:  # files from `python -m src.rerank --download`
+        folder = config.MODELS_DIR / config.RERANK_MODEL
+        needed = [config.RERANK_MODELS[config.RERANK_MODEL]["onnx"], "tokenizer.json", "config.json"]
+        missing = [f for f in needed if not (folder / f).exists()]
+        checks["reranker"] = {"ok": not missing, "model": config.RERANK_MODEL, "missing_files": missing}
+
+    ok = (checks["ollama"]["ok"] and checks["index"]["ok"] and not checks["offline_guard"]["blocked"]
+          and checks.get("reranker", {"ok": True})["ok"])
     return {
         "status": "ok" if ok else "degraded",
         "generator": config.GENERATOR_MODEL,
         "embed_model": config.EMBED_MODEL,
         "top_k": config.TOP_K,
         "threshold": config.SIMILARITY_THRESHOLD,
+        "reranker": config.RERANK_MODEL or None,
+        "rerank_threshold": config.RERANK_THRESHOLD,
         **checks,
     }
 

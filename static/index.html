@@ -99,7 +99,7 @@
     <div id="srcwrap">
       <div class="muted" id="srctitle"></div>
       <table>
-        <thead><tr><th>#</th><th>Document</th><th>Page</th><th>Year</th><th>Similarity</th></tr></thead>
+        <thead><tr><th>#</th><th>Document</th><th>Page</th><th>Year</th><th>Similarity</th><th>Relevance</th></tr></thead>
         <tbody id="sources"></tbody>
       </table>
     </div>
@@ -112,6 +112,7 @@ const $ = (id) => document.getElementById(id);
 const GATE_TEXT = {
   unsupported_crop: "The question names a crop that is not in the document set.",
   low_similarity: "No passage in the documents was a close enough match to answer safely.",
+  low_relevance: "None of the passages found actually answers this question.",
   topic_not_covered: "The documents don't cover this topic for this crop.",
 };
 
@@ -168,11 +169,12 @@ $("ask").addEventListener("submit", async (e) => {
     tbody.replaceChildren(...data.sources.map((s) => {
       const tr = document.createElement("tr");
       tr.append(cell(`[${s.ref}]`), cell(s.doc_id, "doc"), cell(s.page, "num"),
-                cell(s.year, "num"), cell(s.similarity.toFixed(3), "num"));
+                cell(s.year, "num"), cell(s.similarity.toFixed(3), "num"),
+                cell(s.relevance == null ? "–" : s.relevance.toFixed(3), "num"));
       return tr;
     }));
     const t = data.timings_ms;
-    $("timing").textContent = `${data.gated ? "refused before generation" : data.generator} · retrieve ${(t.retrieve / 1000).toFixed(2)} s · generate ${(t.generate / 1000).toFixed(1)} s · total ${(t.total / 1000).toFixed(1)} s`;
+    $("timing").textContent = `${data.gated ? "refused before generation" : data.generator} · retrieve ${(t.retrieve / 1000).toFixed(2)} s · rerank ${(t.rerank / 1000).toFixed(1)} s · generate ${(t.generate / 1000).toFixed(1)} s · total ${(t.total / 1000).toFixed(1)} s`;
     $("status").textContent = "";
   } catch (err) {
     $("status").className = "error";

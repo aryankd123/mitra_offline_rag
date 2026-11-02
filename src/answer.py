@@ -7,6 +7,7 @@ from langchain_ollama import ChatOllama
 
 import config
 from src.coverage import topic_gaps
+from src.rerank import rerank
 from src.retrieve import retrieve
 
 SYSTEM_PROMPT_V3 = (
@@ -56,11 +57,11 @@ def route(question, crop=None):
     return named, note
 
 
-def gate(question, top_sim, crop=None):
+def gate(question, top_sim, crop=None, top_relevance=None):
     """(None, None) if we may answer, otherwise (reason, detail) for the refusal.
 
-    Three signals: unsupported crop named (5A-6), topic not covered for the asked crop (E-16),
-    best-chunk similarity below the threshold (D-42).
+    Three signals: unsupported crop named (5A-6), topic not covered for the asked crop (E-16), and the best
+    passage scoring too low: reranker relevance when a reranker threshold is set (D-64), else cosine (D-42).
     """
     if has_unsupported_crop(question):
         return "unsupported_crop", None
@@ -68,9 +69,30 @@ def gate(question, top_sim, crop=None):
         gaps = topic_gaps(question, crop)
         if gaps:
             return "topic_not_covered", f"The {crop} documents never mention: {', '.join(gaps)}."
-    if top_sim < config.SIMILARITY_THRESHOLD:
+    if config.RERANK_THRESHOLD is not None and top_relevance is not None:
+        if top_relevance < config.RERANK_THRESHOLD:
+            return "low_relevance", None
+    elif top_sim < config.SIMILARITY_THRESHOLD:
         return "low_similarity", None
     return None, None
+
+
+def find_passages(question, crop, k=config.TOP_K):
+    """Embedding search, then cross-encoder re-ordering of the shortlist if a reranker is configured (D-64).
+
+    Returns (chunks, best cosine, best reranker score or None, timings). The best cosine is taken over the whole
+    shortlist, so the cosine gate sees the same number with or without reranking.
+    """
+    t0 = time.perf_counter()
+    chunks = retrieve(question, k=config.RERANK_CANDIDATES if config.RERANK_MODEL else k, crop=crop)
+    t1 = time.perf_counter()
+    top_sim = max((c["similarity"] for c in chunks), default=0.0)
+    top_relevance = None
+    if config.RERANK_MODEL and chunks:
+        chunks = rerank(question, chunks, config.RERANK_MODEL, k)
+        top_relevance = chunks[0]["rerank_score"]
+    timings = {"retrieve_s": round(t1 - t0, 3), "rerank_s": round(time.perf_counter() - t1, 3)}
+    return chunks, top_sim, top_relevance, timings
 
 
 def tidy(ans):
@@ -94,35 +116,36 @@ def format_programmatic_sources(sources, gated=False):
               else "Retrieved sources: the model was shown these passages:")
     lines = [header]
     for s in sources:
-        lines.append(f"  [{s['ref']}] {s['doc_id']}, page {s['page']} (similarity={s['similarity']:.4f})")
+        relevance = f", relevance={s['relevance']:.4f}" if s.get("relevance") is not None else ""
+        lines.append(f"  [{s['ref']}] {s['doc_id']}, page {s['page']} (similarity={s['similarity']:.4f}{relevance})")
     return "\n".join(lines)
 
 
 def answer_question(question, k=config.TOP_K, crop=None):
     crop_used, crop_note = route(question, crop)
-    t0 = time.perf_counter()
-    chunks = retrieve(question, k=k, crop=crop_used)
-    t_retrieve = time.perf_counter() - t0
+    chunks, top_sim, top_relevance, timings = find_passages(question, crop_used, k)
 
-    top_sim = chunks[0]["similarity"] if chunks else 0.0
     sources = [
-        {"ref": i + 1, "doc_id": c["doc_id"], "page": c["page"], "year": c["year"], "similarity": c["similarity"]}
+        {"ref": i + 1, "doc_id": c["doc_id"], "page": c["page"], "year": c["year"], "similarity": c["similarity"],
+         "relevance": c.get("rerank_score")}
         for i, c in enumerate(chunks)
     ]
     result = {
         "prompt_version": config.PROMPT_VERSION,
         "generator": config.GENERATOR_MODEL,
+        "reranker": config.RERANK_MODEL or None,
         "sources": sources,
         "top_similarity": top_sim,
+        "top_relevance": top_relevance,
         "crop_used": crop_used,
         "crop_note": crop_note,
     }
 
-    reason, detail = gate(question, top_sim, crop_used)
+    reason, detail = gate(question, top_sim, crop_used, top_relevance)
     if reason:
         return {**result, "answer": config.REFUSAL_SENTENCE, "gated": True, "gate_reason": reason, "gate_detail": detail,
                 "sources_block": format_programmatic_sources(sources, gated=True),
-                "timings": {"retrieve_s": round(t_retrieve, 3), "generate_s": 0.0}}
+                "timings": {**timings, "generate_s": 0.0}}
 
     user_prompt = (
         f"Context:\n{format_context(chunks)}\n\n"
@@ -137,4 +160,4 @@ def answer_question(question, k=config.TOP_K, crop=None):
 
     return {**result, "answer": tidy(response.content), "gated": False, "gate_reason": None, "gate_detail": None,
             "sources_block": format_programmatic_sources(sources),
-            "timings": {"retrieve_s": round(t_retrieve, 3), "generate_s": round(t_generate, 3)}}
+            "timings": {**timings, "generate_s": round(t_generate, 3)}}

@@ -36,6 +36,26 @@ OCR_CACHE_DIR = DATA_DIR / "ocr_cache"
 
 TOP_K = 5
 SIMILARITY_THRESHOLD = 0.725
+
+# Cross-encoder reranking (src/rerank.py, Iteration 4, D-64). Files are downloaded once with
+# `python -m src.rerank --download` into MODELS_DIR, then loaded from disk only.
+MODELS_DIR = DATA_DIR / "models"
+RERANK_CANDIDATES = 30  # embedding shortlist to re-score; Recall@30 = 0.938 on dev (test 55)
+RERANK_MODELS = {  # name -> Hugging Face repo, pinned revision, ONNX file, gate threshold chosen on dev (test 57)
+    "minilm-l6": {"repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+                  "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a", "onnx": "onnx/model.onnx",
+                  "threshold": 0.035},
+    "bge-m3-int8": {"repo": "onnx-community/bge-reranker-v2-m3-ONNX",
+                    "revision": "6f5ff65298512715a1e669753bc754d2bc8f367b", "onnx": "onnx/model_int8.onnx",
+                    "threshold": 0.171},
+}
+RERANK_MAX_TOKENS = 512  # question + passage, longer pairs are cut from the passage end
+# bge chosen by Aryan on 1 Nov (dev: Recall@5 0.917, gate 1/48 wrongly refused, 0/12 wrongly answered; 39 s median
+# on this CPU). "minilm-l6" = fast mode (4 s, but rice diseases / stem borer get answers); "" = no reranking.
+RERANK_MODEL = os.environ.get("MITRA_RERANK_MODEL", "bge-m3-int8")
+# Gate on the best reranker score (0..1) instead of SIMILARITY_THRESHOLD; None = keep the cosine check
+RERANK_THRESHOLD = RERANK_MODELS[RERANK_MODEL]["threshold"] if RERANK_MODEL else None
+
 # Word in the question -> crop in the metadata. Routing searches only that crop's chunks (Iteration 2, D-54).
 CROP_SYNONYMS = {
     "rice": "rice", "paddy": "rice",

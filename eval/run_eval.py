@@ -16,9 +16,8 @@ import numpy as np
 
 import config
 from src import netguard
-from src.answer import answer_question, gate, route
+from src.answer import answer_question, find_passages, gate, route
 from src.corpus import norm_text
-from src.retrieve import retrieve
 
 RANK_DEPTH = 50  # how deep we look for the gold rank; MRR is cut at 10
 QUESTIONS_VERSION = "v3"  # v3 = v2 + q69-q94 for the Iteration 3 documents, q44 relabelled in scope
@@ -75,13 +74,14 @@ def summarize(recs):
 def evaluate(split):
     qs = load_questions(split)
     in_recs, gate_rows = [], []
+    # With a reranker only its shortlist is ranked, so gold ranks stop at RERANK_CANDIDATES
+    depth = config.RERANK_CANDIDATES if config.RERANK_MODEL else RANK_DEPTH
     for q in qs:
         crop = route(q["question"])[0]  # same routing as answer_question
-        ranked = retrieve(q["question"], k=RANK_DEPTH, crop=crop)
+        ranked, top_sim, top_relevance, _ = find_passages(q["question"], crop, k=depth)
         for c in ranked:
             c["text_norm"] = norm_text(c["text"])
-        top_sim = ranked[0]["similarity"]
-        reason, _ = gate(q["question"], top_sim, crop)
+        reason, _ = gate(q["question"], top_sim, crop, top_relevance)
         gate_rows.append({"id": q["id"], "type": q["type"], "tag": q["tag"], "top_sim": top_sim,
                           "refused": reason is not None, "reason": reason})
         if q["type"] == "in_scope":
@@ -162,7 +162,11 @@ def main():
     oos = [g for g in gate_rows if g["type"] == "out_of_scope"]
     fr = sum(g["refused"] for g in ins)
     fa = sum(not g["refused"] for g in oos)
-    print(f"\n  Gate (crop guard + topic gap alpha={config.TOPIC_GAP_ALPHA} + similarity tau={config.SIMILARITY_THRESHOLD}):")
+    last = (f"reranker {config.RERANK_MODEL} theta={config.RERANK_THRESHOLD}"
+            if config.RERANK_MODEL and config.RERANK_THRESHOLD is not None
+            else f"similarity tau={config.SIMILARITY_THRESHOLD}" + (f", reranker {config.RERANK_MODEL} re-orders only"
+                                                                     if config.RERANK_MODEL else ""))
+    print(f"\n  Gate (crop guard + topic gap alpha={config.TOPIC_GAP_ALPHA} + {last}):")
     print(f"    in-scope false reject:     {fr}/{len(ins)}  {[g['id'] + ':' + g['reason'] for g in ins if g['refused']]}")
     print(f"    out-of-scope false accept: {fa}/{len(oos)}  {[(g['id'], g['top_sim']) for g in oos if not g['refused']]}")
     for tag in sorted({g["tag"] for g in gate_rows}):
@@ -176,7 +180,9 @@ def main():
                "min_chunk_len": config.MIN_CHUNK_LEN, "embed_model": config.EMBED_MODEL,
                "threshold": config.SIMILARITY_THRESHOLD, "crop_guard": True, "search": "exact (numpy)",
                "crop_routing": config.CROP_ROUTING, "topic_gap_alpha": config.TOPIC_GAP_ALPHA,
-               "generator": config.GENERATOR_MODEL, "questions": QUESTIONS_VERSION}
+               "generator": config.GENERATOR_MODEL, "questions": QUESTIONS_VERSION,
+               "reranker": config.RERANK_MODEL or None, "rerank_candidates": config.RERANK_CANDIDATES,
+               "rerank_threshold": config.RERANK_THRESHOLD}
         with open(config.EXPERIMENTS_CSV, "a", encoding="utf-8", newline="") as f:
             csv.writer(f).writerow([
                 args.run_id or f"6_modules_chroma_{args.split}", datetime.now().strftime("%Y-%m-%d %H:%M"), json.dumps(cfg),

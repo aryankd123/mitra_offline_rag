@@ -21,7 +21,9 @@ def show(question, crop=None):
     print(res["sources_block"])
     t = res["timings"]
     gate = f"refused ({res['gate_reason']})" if res["gated"] else res["generator"]
-    print(f"[{gate} | top_sim={res['top_similarity']:.4f} | retrieve {t['retrieve_s']}s | generate {t['generate_s']}s]\n")
+    relevance = f" | top_relevance={res['top_relevance']:.4f}" if res["top_relevance"] is not None else ""
+    print(f"[{gate} | top_sim={res['top_similarity']:.4f}{relevance} | retrieve {t['retrieve_s']}s | "
+          f"rerank {t['rerank_s']}s | generate {t['generate_s']}s]\n")
 
 
 def main():
